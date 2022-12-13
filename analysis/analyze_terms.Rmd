@@ -76,10 +76,17 @@ df_data
 # Define search terms
 term_summaries <- list(
   "error" = ~max(str_detect(.x, "error")),
-  "uncertainty" = ~max(str_detect(.x, "uncertainty")),
+  "uncertainty" = ~max(str_detect(.x, "uncertainty|uncertain")),
+  "variability" = ~max(str_detect(.x, "variability")),
+  "variation" = ~max(str_detect(.x, "variation")),
+  "probability" = ~max(str_detect(.x, "probability")),
+  "safety" = ~max(str_detect(.x, "safety")),
+  "force" = ~max(str_detect(.x, "force")),
+  "load" = ~max(str_detect(.x, "load")),
   "tolerance" = ~max(str_detect(.x, "tolerance"))
 )
 
+# Run analysis
 df_data %>% 
   group_by(ISBN) %>% 
   summarize(across(term, term_summaries)) %>% 
