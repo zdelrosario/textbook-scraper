@@ -1,0 +1,91 @@
+---
+title: "Analyze Textbook Index Terms"
+output: html_notebook
+---
+
+# Setup
+
+```{r}
+library(tidyverse)
+library(googlesheets4)
+filename <- "../data_proc/masterlist.csv"
+url_metadata <- "https://docs.google.com/spreadsheets/d/1n_fFptcgPIzzlNYHkUblP_cReWGNo3TKGJ-Bo7W5oA0/edit#gid=0"
+```
+
+```{r}
+gs4_auth(email = "legomannqc@gmail.com")
+```
+
+
+## Load metadata
+
+```{r}
+df_meta_raw <- read_sheet(url_metadata, col_types = str_c(c("cccc", rep("?", 20)), collapse=""))
+df_meta_raw %>% 
+  glimpse()
+```
+
+Process metadata
+
+```{r}
+df_meta <- 
+  df_meta_raw %>% 
+  select(
+    authors = Author,
+    title = Title,
+    ISBN = `ISBN 13`,
+    courselist_institution = `Courselist Institution`
+  ) %>% 
+  filter(!is.na(authors))
+df_meta
+```
+
+
+
+## Load scraped PDF data
+
+```{r}
+df_raw <- read_csv(
+  filename,
+  col_types = "cc"
+)
+df_raw
+```
+
+## Process
+
+```{r}
+df_data <- 
+  df_raw %>% 
+  rename(term = Term) %>% 
+  # Atomize to single words
+  separate_rows(term) %>% 
+  # Remove numbers
+  filter(!str_detect(term, "\\d+")) %>% 
+  # Lowercase
+  mutate(term = str_to_lower(term))
+
+df_data
+```
+
+
+# Analyze
+
+
+```{r}
+# Define search terms
+term_summaries <- list(
+  "error" = ~max(str_detect(.x, "error")),
+  "uncertainty" = ~max(str_detect(.x, "uncertainty")),
+  "tolerance" = ~max(str_detect(.x, "tolerance"))
+)
+
+df_data %>% 
+  group_by(ISBN) %>% 
+  summarize(across(term, term_summaries)) %>% 
+  summarize(
+    across(-ISBN, sum),
+    total = n()
+  )
+```
+
