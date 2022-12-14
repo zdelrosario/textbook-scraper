@@ -1,9 +1,15 @@
 ---
 title: "Analyze Textbook Index Terms"
-output: html_notebook
+output: github_document
 ---
 
+
+
+A term that appears in the index of a textbook has been selected by the author & publisher as a subject to highlight. In this sense, a term in the index is "important."
+
 # Setup
+
+Load necessary packages and hard-code data locations. Note that the data-loading chunks below assume you have run the textbook scraper locally (i.e., that `masterlist.csv` is ready to go).
 
 ```{r}
 library(tidyverse)
@@ -12,20 +18,25 @@ filename <- "../data_proc/masterlist.csv"
 url_metadata <- "https://docs.google.com/spreadsheets/d/1n_fFptcgPIzzlNYHkUblP_cReWGNo3TKGJ-Bo7W5oA0/edit#gid=0"
 ```
 
-```{r}
+Authenticate your Google account for Google Sheets access.
+
+```{r include=FALSE}
 gs4_auth(email = "legomannqc@gmail.com")
 ```
 
-
 ## Load metadata
 
+Load the book metadata from our shared Google Sheet.
+
 ```{r}
-df_meta_raw <- read_sheet(url_metadata, col_types = str_c(c("cccc", rep("?", 20)), collapse=""))
+df_meta_raw <- read_sheet(
+    url_metadata, col_types = str_c(c("cccc", rep("?", 20)), collapse = "")
+  )
 df_meta_raw %>% 
   glimpse()
 ```
 
-Process metadata
+Process the metadata.
 
 ```{r}
 df_meta <- 
@@ -34,15 +45,20 @@ df_meta <-
     authors = Author,
     title = Title,
     ISBN = `ISBN 13`,
-    courselist_institution = `Courselist Institution`
+    courselist = Courselist,
+    courselist_institution = `Courselist Institution`,
+    need_ocr = `OCR Needed`,
+    include = Inclusion,
+    have_pdf = `PDF Stored`
   ) %>% 
+  mutate(include = include == "Include") %>% 
   filter(!is.na(authors))
 df_meta
 ```
 
-
-
 ## Load scraped PDF data
+
+This comes from the locally-stored `masterlist.csv` file.
 
 ```{r}
 df_raw <- read_csv(
@@ -52,47 +68,132 @@ df_raw <- read_csv(
 df_raw
 ```
 
-## Process
+## Process term data
+
+Process the Index term data. "Atomize" the lines from each index into single words. This will
 
 ```{r}
 df_data <- 
   df_raw %>% 
   rename(term = Term) %>% 
   # Atomize to single words
-  separate_rows(term) %>% 
-  # Remove numbers
-  filter(!str_detect(term, "\\d+")) %>% 
+  # separate_rows(term) %>% 
   # Lowercase
   mutate(term = str_to_lower(term))
 
 df_data
 ```
 
+## Sanity-check available PDFs
+
+Are any of the fully-digital PDFs unaccounted?
+
+```{r}
+df_meta %>% 
+  filter(include, have_pdf, !need_ocr) %>% 
+  distinct(ISBN, .keep_all = TRUE) %>% 
+  anti_join(df_data, by = "ISBN")
+```
+
+I've used the chunk above to track down "missing" PDFs; most of these were due to ISBN's that did not match between the PDF filename and the metadata (Google) sheet.
+
+## Need OCR
+
+Which books do we need to run through OCR?
+
+```{r}
+df_meta %>% 
+  filter(include, have_pdf, need_ocr) %>% 
+  select(authors, title)
+```
+
 
 # Analyze
 
+## Describe corpus
+
+Count the number of book indexes in the corpus
+
+```{r count-total-books}
+df_data %>% 
+  semi_join(
+    .,
+    df_meta %>% 
+      filter(include),
+    by = "ISBN"
+  ) %>% 
+  distinct(ISBN) %>% 
+  count()
+```
+
+## Count terms
+
+The following code detects the presence of certain keywords in the textbook indexes. The `count` represents the number of textbooks whose index includes the keyword, while the `frac` represents the fraction (of our available corpus) that includes the keyword.
+
+Note that some of the terms are multiply-defined; for instance, `tradeoff` is counted if either `trade` or `tradeoff` is detected in the Index.
 
 ```{r}
 # Define search terms
 term_summaries <- list(
+  "cost" = ~max(str_detect(.x, "cost")),
+  "design" = ~max(str_detect(.x, "design")),
   "error" = ~max(str_detect(.x, "error")),
-  "uncertainty" = ~max(str_detect(.x, "uncertainty|uncertain")),
-  "variability" = ~max(str_detect(.x, "variability")),
-  "variation" = ~max(str_detect(.x, "variation")),
+  "force" = ~max(str_detect(.x, "force")),
+  "limit" = ~max(str_detect(.x, "limit")),
+  "load" = ~max(str_detect(.x, "load")),
+  "maximize" = ~max(str_detect(.x, "maximize|maximization")),
+  "minimize" = ~max(str_detect(.x, "minimize|minimization")),
+  "optimize" = ~max(str_detect(.x, "optimize|optimization")),
+  "pressure" = ~max(str_detect(.x, "pressure")),
   "probability" = ~max(str_detect(.x, "probability")),
   "safety" = ~max(str_detect(.x, "safety")),
-  "force" = ~max(str_detect(.x, "force")),
-  "load" = ~max(str_detect(.x, "load")),
-  "tolerance" = ~max(str_detect(.x, "tolerance"))
+  "safety factor" = ~max(str_detect(.x, "safety factor|factor of safety")),
+  "stress" = ~max(str_detect(.x, "stress")),
+  "strength" = ~max(str_detect(.x, "strength")),
+  "tolerance" = ~max(str_detect(.x, "tolerance")),
+  "tradeoff" = ~max(str_detect(.x, "tradeoff|trade")),
+  "uncertainty" = ~max(str_detect(.x, "uncertainty|uncertain")),
+  "variability" = ~max(str_detect(.x, "variability")),
+  "variation" = ~max(str_detect(.x, "variation"))
 )
 
 # Run analysis
-df_data %>% 
+df_counts <- 
+  df_data %>% 
+  semi_join(
+    .,
+    df_meta %>% 
+      filter(include),
+    by = "ISBN"
+  ) %>% 
   group_by(ISBN) %>% 
   summarize(across(term, term_summaries)) %>% 
   summarize(
     across(-ISBN, sum),
     total = n()
-  )
+  ) %>% 
+  pivot_longer(
+    cols = -total,
+    names_to = "term",
+    values_to = "count"
+  ) %>% 
+  mutate(
+    term = str_remove_all(term, "term_"),
+    frac = round(count / total, digits = 2)
+  ) %>% 
+  select(-total) %>% 
+  arrange(desc(count)) 
+
+df_counts %>% 
+  knitr::kable()
 ```
 
+*Observations*
+
+- Physics-related terms dominate the list; `force` is important in the vast majority of engineering textbooks.
+- Uncertainty-related terms appear less frequently:
+  - `probability` is important in `r df_counts %>% filter(term == "probability") %>% pull(frac)` of textbooks. This is similar to `frac` of `strength`
+  - `uncertainty` is important in `r df_counts %>% filter(term == "uncertainty") %>% pull(frac)` of textbooks. This is similar to `frac` of `optimize`
+  - `tolerance` is important in `r df_counts %>% filter(term == "tolerance") %>% pull(frac)` of textbooks. This is a very small fraction, but `tolerance` is quite a bit more specific than something like `uncertainty`
+- "Error" shows up an intermediate number of times, but as EF has shown, the term has a highly-variable meaning to practicing engineers.
+  - `error` is important in `r df_counts %>% filter(term == "error") %>% pull(frac)` of textbooks
