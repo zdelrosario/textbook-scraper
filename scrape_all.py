@@ -36,6 +36,10 @@ def scrape_index(filename):
         print("ISBN already in masterlist.") #prints error and returns
         return
 
+    if re.search("ocry", filename, re.IGNORECASE) is not None:
+        print("File {} needs OCR; skipping...".format(filename))
+        return
+
     filename = "./data_pdf/" + filename
     pdfFileObj = open(filename, 'rb')
     # creating a pdf reader object
@@ -58,7 +62,7 @@ def scrape_index(filename):
     for term in text:
         if any(c.isalpha() for c in str(term)):
             filtered.append((term, ISBN))
-            index = pd.DataFrame(filtered)
+    index = pd.DataFrame(filtered)
     index.to_csv('./data_proc/masterlist.csv', mode='a', index=False, header=False)
 
 ## Find and process all files
@@ -66,7 +70,13 @@ filenames = os.listdir('./data_pdf')
 # Filter to PDFs only
 filenames = filter(lambda s: s[-3:].lower() == "pdf", filenames)
 
+# Ensure masterlist exists
+if not os.path.exists("./data_proc/masterlist.csv"):
+    pd.DataFrame({"Term": [], "ISBN": []}).to_csv("./data_proc/masterlist.csv", index=False)
+    print("No masterlist.csv found; creating blank file")
+
+# Process all files
 print("Scraping all Index files:")
 for filename in filenames:
+    print("... scraping {}".format(filename))
     scrape_index(filename)
-    print("... scraped {}".format(filename))
