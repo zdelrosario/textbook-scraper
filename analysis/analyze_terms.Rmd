@@ -3,9 +3,7 @@ title: "Analyze Textbook Index Terms"
 output: github_document
 ---
 
-
-
-A term that appears in the index of a textbook has been selected by the author & publisher as a subject to highlight. In this sense, a term in the index is "important."
+A term that appears in the index of a textbook has been selected by the author as a subject to highlight and make more accessible to the reader. In this sense, a term in the index is "important."
 
 # Setup
 
@@ -30,7 +28,7 @@ Load the book metadata from our shared Google Sheet.
 
 ```{r}
 df_meta_raw <- read_sheet(
-    url_metadata, col_types = str_c(c("cccc", rep("?", 20)), collapse = "")
+    url_metadata, col_types = str_c(c("cccc", rep("?", 19)), collapse = "")
   )
 df_meta_raw %>% 
   glimpse()
@@ -46,12 +44,17 @@ df_meta <-
     title = Title,
     ISBN = `ISBN 13`,
     courselist = Courselist,
-    courselist_institution = `Courselist Institution`,
+    known_courses = `Known Courses`,
     need_ocr = `OCR Needed`,
     include = Inclusion,
-    have_pdf = `PDF Stored`
+    have_pdf = `PDF Stored`,
+    no_index = `No Index`,
   ) %>% 
-  mutate(include = include == "Include") %>% 
+  mutate(
+    include = include == "Include",
+    courselist_institution = str_extract(known_courses, "\\([\\w|\\s]+\\)$") %>% 
+      str_remove_all(., "[:punct:]"),
+  ) %>% 
   filter(!is.na(authors))
 df_meta
 ```
@@ -107,10 +110,63 @@ df_meta %>%
   select(authors, title)
 ```
 
+## Special cases
+
+```{r}
+df_data %>% 
+  semi_join(
+    ., 
+    df_meta %>% 
+      filter(
+        # str_detect(authors, "Kerrebrock"), # Scraper throws weird msg 
+        ISBN == "9780471947219" # Sheppard & Tongue; OCR'd at library
+      ),
+    by = "ISBN"
+  )
+```
+
+## Missing books
+
+Are any books missing from the digitized corpus?
+
+```{r}
+df_meta %>% 
+  filter(include, courselist) %>% 
+  anti_join(df_data, by = "ISBN") %>% 
+  select(title, everything())
+```
+
 
 # Analyze
 
+## Write full list
+
+```{r write-full-list}
+df_meta %>% 
+  filter(include, courselist) %>% 
+  select(
+    ISBN, courselist_institution, no_index
+  ) %>% 
+  ## Compute artifact recovery
+  left_join(
+    df_data %>% 
+      distinct(ISBN) %>% 
+      mutate(recovered = TRUE)
+  ) %>% 
+  replace_na(list(recovered = FALSE)) %>% 
+  arrange(courselist_institution) %>% 
+  rename(
+    `Institution` = courselist_institution,
+    `No Index` = no_index,
+    Recovered = recovered,
+  ) %>% 
+  write_csv("../data_proc/list_pub.csv")
+```
+
+
 ## Describe corpus
+
+### Unique, obtained books
 
 Count the number of book indexes in the corpus
 
@@ -119,51 +175,287 @@ df_data %>%
   semi_join(
     .,
     df_meta %>% 
-      filter(include),
+      filter(include, courselist),
     by = "ISBN"
   ) %>% 
   distinct(ISBN) %>% 
   count()
 ```
 
+
+### Courselists
+
+```{r}
+df_courselist_counts <- 
+  df_meta %>% 
+  filter(include, courselist) %>% 
+  count(courselist_institution) %>% 
+  arrange(desc(n)) %>% 
+  rename(
+    Institution = courselist_institution,
+    `Reserve Books` = n
+  ) %>%
+  mutate(
+    Institution = str_replace(Institution, "CalPoly", "CalPoly SLO"),
+  )
+  
+df_courselist_counts %>% 
+  knitr::kable()
+
+df_courselist_counts %>% 
+  summarize(n_total = sum(`Reserve Books`))
+```
+
+### Unique, corselist books
+
+```{r}
+df_meta %>% 
+  filter(include, courselist, !no_index) %>% 
+  distinct(ISBN) %>% 
+  count()
+```
+
+
+### Digital Index
+
+```{r}
+df_meta %>% 
+  filter(include, courselist, !no_index, !need_ocr) %>% 
+  semi_join(df_data, by = "ISBN") %>% 
+  distinct(ISBN) %>% 
+  count()
+```
+
+### Print Index
+
+```{r}
+df_meta %>% 
+  filter(include, courselist, !no_index, need_ocr) %>% 
+  semi_join(df_data, by = "ISBN") %>% 
+  distinct(ISBN) %>% 
+  count()
+```
+
+### No Index
+
+```{r}
+df_meta %>% 
+  filter(include, courselist, no_index) %>% 
+  distinct(ISBN) %>% 
+  count()
+```
+
+### Unobtained books
+
+```{r}
+df_meta %>% 
+  filter(include, courselist, !no_index) %>% 
+  anti_join(df_data, by = "ISBN") %>% 
+  distinct(ISBN) %>% 
+  count()
+```
+
+### Most-occurring books
+
+```{r}
+df_meta %>% 
+  filter(include, courselist) %>% 
+  count(ISBN) %>% 
+  arrange(desc(n)) %>% 
+  left_join(
+    ., 
+    df_meta %>% 
+      distinct(ISBN, .keep_all = TRUE) %>% 
+      select(ISBN, title)
+  )
+```
+
+
+## Statistics-related titles
+
+### Full corpus
+
+```{r}
+df_meta %>% 
+  filter(include, courselist) %>% 
+  summarize(
+    n_total = n(),
+    n_stats = sum(str_detect(str_to_lower(title), "statis|data"))
+  ) %>% 
+  mutate(frac_stat = n_stats / n_total)
+```
+
+
+### Missing books
+
+```{r}
+df_meta %>% 
+  filter(include, courselist) %>% 
+  anti_join(df_data, by = "ISBN") %>% 
+  summarize(
+    n_total = n(),
+    n_stats = sum(str_detect(str_to_lower(title), "statis|data"))
+  ) %>% 
+  mutate(frac_stat = n_stats / n_total)
+```
+
+### Fisher exact test
+
+```{r}
+## Set up contingency table
+n_corpus_stats <- 
+  df_meta %>% 
+  filter(
+    include, 
+    courselist, 
+    str_detect(str_to_lower(title), "statis|data")
+  ) %>% 
+  semi_join(df_data, by = "ISBN") %>% 
+  count() %>% 
+  pull(n)
+
+n_Ncorpus_stats <- 
+  df_meta %>% 
+  filter(
+    include, 
+    courselist, 
+    str_detect(str_to_lower(title), "statis|data")
+  ) %>% 
+  anti_join(df_data, by = "ISBN") %>% 
+  count() %>% 
+  pull(n)
+
+n_corpus_Nstats <- 
+  df_meta %>% 
+  filter(
+    include, 
+    courselist, 
+    !str_detect(str_to_lower(title), "statis|data")
+  ) %>% 
+  semi_join(df_data, by = "ISBN") %>% 
+  count() %>% 
+  pull(n)
+
+n_Ncorpus_Nstats <- 
+  df_meta %>% 
+  filter(
+    include, 
+    courselist, 
+    !str_detect(str_to_lower(title), "statis|data")
+  ) %>% 
+  anti_join(df_data, by = "ISBN") %>% 
+  count() %>% 
+  pull(n)
+
+mat_counts <-
+  matrix(
+    c(n_corpus_stats, n_corpus_Nstats, n_Ncorpus_stats, n_Ncorpus_Nstats),
+    nrow = 2
+)
+mat_counts
+
+## Run the test
+fisher.test(mat_counts)
+```
+
+The fraction of statistics-related titles among the missing books is not significantly different from fraction in the corpus.
+
+```{r}
+TeaTasting <-
+matrix(c(3, 1, 1, 3),
+       nrow = 2
+)
+TeaTasting
+       # dimnames = list(Guess = c("Milk", "Tea"),
+       #                 Truth = c("Milk", "Tea")))
+fisher.test(TeaTasting)
+```
+
+
+
 ## Count terms
+
+### Definitions
 
 The following code detects the presence of certain keywords in the textbook indexes. The `count` represents the number of textbooks whose index includes the keyword, while the `frac` represents the fraction (of our available corpus) that includes the keyword.
 
 Note that some of the terms are multiply-defined; for instance, `tradeoff` is counted if either `trade` or `tradeoff` is detected in the Index.
 
 ```{r}
-# Define search terms
+# Define search terms through helper functions
 term_summaries <- list(
+  ## Physics
+  "acceleration" = ~max(str_detect(.x, "acceleration")),
+  "force" = ~max(str_detect(.x, "force")),
+  "load" = ~max(str_detect(.x, "load")),
+  "pressure" = ~max(str_detect(.x, "pressure")),
+  "strength" = ~max(str_detect(.x, "strength")),
+  "stress" = ~max(str_detect(.x, "stress")),
+  ## Engineering design
   "cost" = ~max(str_detect(.x, "cost")),
   "design" = ~max(str_detect(.x, "design")),
-  "error" = ~max(str_detect(.x, "error")),
-  "force" = ~max(str_detect(.x, "force")),
-  "limit" = ~max(str_detect(.x, "limit")),
-  "load" = ~max(str_detect(.x, "load")),
+  "failure" = ~max(str_detect(.x, "failure|fail")),
   "maximize" = ~max(str_detect(.x, "maximize|maximization")),
   "minimize" = ~max(str_detect(.x, "minimize|minimization")),
   "optimize" = ~max(str_detect(.x, "optimize|optimization")),
-  "pressure" = ~max(str_detect(.x, "pressure")),
-  "probability" = ~max(str_detect(.x, "probability")),
   "safety" = ~max(str_detect(.x, "safety")),
   "safety factor" = ~max(str_detect(.x, "safety factor|factor of safety")),
-  "stress" = ~max(str_detect(.x, "stress")),
-  "strength" = ~max(str_detect(.x, "strength")),
-  "tolerance" = ~max(str_detect(.x, "tolerance")),
   "tradeoff" = ~max(str_detect(.x, "tradeoff|trade")),
+  ## Uncertainty
+  "error" = ~max(str_detect(.x, "error")),
+  "probability" = ~max(str_detect(.x, "probability")),
+  "statistics" = ~max(str_detect(.x, "statistic")),
+  "tolerance" = ~max(str_detect(.x, "tolerance")),
   "uncertainty" = ~max(str_detect(.x, "uncertainty|uncertain")),
   "variability" = ~max(str_detect(.x, "variability")),
-  "variation" = ~max(str_detect(.x, "variation"))
+  ## Mixed / ambiguous
+  "variation" = ~max(str_detect(.x, "variation")),
+  "limit" = ~max(str_detect(.x, "limit"))
 )
 
+df_classes <- tribble(
+  ~term, ~class,
+  "acceleration", "physics",
+  "force", "physics",
+  "load", "physics", 
+  "pressure", "physics",
+  "strength", "physics",
+  "stress", "physics",
+  
+  "cost", "design",
+  "design", "design",
+  "failure", "design",
+  "maximize", "design",
+  "minimize", "design",
+  "optimize", "design",
+  "safety", "design",
+  "safety factor", "design",
+  "tradeoff", "design",
+  
+  ## Uncertainty
+  "probability", "uncertainty",
+  "statistics", "uncertainty",
+  "tolerance", "uncertainty",
+  "uncertainty", "uncertainty",
+  "variability", "uncertainty",
+  
+  ## Mixed use
+  "error", "(mixed)",
+  "variation", "(mixed)",
+  "limit", "(mixed)",
+)
+```
+
+### Run count
+
+```{r}
 # Run analysis
 df_counts <- 
   df_data %>% 
   semi_join(
     .,
     df_meta %>% 
-      filter(include),
+      filter(include, courselist),
     by = "ISBN"
   ) %>% 
   group_by(ISBN) %>% 
@@ -181,19 +473,60 @@ df_counts <-
     term = str_remove_all(term, "term_"),
     frac = round(count / total, digits = 2)
   ) %>% 
-  select(-total) %>% 
-  arrange(desc(count)) 
+  arrange(desc(count)) %>% 
+  left_join(df_classes) %>% 
+  select(term, class, count, frac)
 
 df_counts %>% 
   knitr::kable()
 ```
 
+```{r}
+## Visualize
+ar = 1 / 4
+df_counts %>% 
+  # filter(class != "(mixed)") %>% 
+  mutate(term = fct_reorder(term, -frac)) %>% 
+  
+  ggplot(aes(term, frac)) +
+  geom_col(aes(fill = class)) +
+  # facet_grid(~class, scales = "free_x") +
+  
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = scales::label_percent(),
+  ) +
+  scale_fill_discrete(name = "Term Class") +
+  rzdr::theme_common() +
+  theme(
+    axis.text.x = element_text(angle = 270, hjust = 0),
+    legend.position = "bottom",
+    # legend.direction = "vertical",
+    aspect.ratio = ar,
+  ) +
+  labs(
+    x = "Index Term",
+    y = "Books Including Term",
+  )
+
+ggsave(
+  "../images/textbooks-terms.png",
+  width = 8,
+  height = 5,
+  bg = "white"
+)
+```
+
 *Observations*
 
-- Physics-related terms dominate the list; `force` is important in the vast majority of engineering textbooks.
+- Physics-related terms dominate the list; `force` is important in the vast majority of engineering textbooks (`r df_counts %>% filter(term == "force") %>% pull(frac)`).
 - Uncertainty-related terms appear less frequently:
   - `probability` is important in `r df_counts %>% filter(term == "probability") %>% pull(frac)` of textbooks. This is similar to `frac` of `strength`
   - `uncertainty` is important in `r df_counts %>% filter(term == "uncertainty") %>% pull(frac)` of textbooks. This is similar to `frac` of `optimize`
   - `tolerance` is important in `r df_counts %>% filter(term == "tolerance") %>% pull(frac)` of textbooks. This is a very small fraction, but `tolerance` is quite a bit more specific than something like `uncertainty`
 - "Error" shows up an intermediate number of times, but as EF has shown, the term has a highly-variable meaning to practicing engineers.
   - `error` is important in `r df_counts %>% filter(term == "error") %>% pull(frac)` of textbooks
+  
+## Count categories
+
+TODO
