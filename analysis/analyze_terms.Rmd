@@ -16,6 +16,7 @@ library(tidyverse)
 library(googlesheets4)
 filename <- "../data_proc/masterlist.csv"
 url_metadata <- "https://docs.google.com/spreadsheets/d/1n_fFptcgPIzzlNYHkUblP_cReWGNo3TKGJ-Bo7W5oA0/edit#gid=0"
+url_manual <- "https://docs.google.com/spreadsheets/d/1TMl_vxOytHYPd9_CAJoJNJAkbWnj9FMUtxLg5R8ufyo/edit#gid=0"
 ```
 
 Authenticate your Google account for Google Sheets access.
@@ -30,7 +31,7 @@ Load the book metadata from our shared Google Sheet.
 
 ```{r}
 df_meta_raw <- read_sheet(
-    url_metadata, col_types = str_c(c("cccc", rep("?", 20)), collapse = "")
+    url_metadata, col_types = str_c(c("cccc", rep("?", 19)), collapse = "")
   )
 df_meta_raw %>% 
   glimpse()
@@ -46,12 +47,15 @@ df_meta <-
     title = Title,
     ISBN = `ISBN 13`,
     courselist = Courselist,
-    courselist_institution = `Courselist Institution`,
     need_ocr = `OCR Needed`,
     include = Inclusion,
-    have_pdf = `PDF Stored`
+    have_pdf = `PDF Stored`,
+    courses = `Known Courses`,
   ) %>% 
-  mutate(include = include == "Include") %>% 
+  mutate(
+    include = include == "Include",
+    institution = str_match(courses, "\\([\\w|\\s]+\\)")
+  ) %>% 
   filter(!is.na(authors))
 df_meta
 ```
@@ -68,9 +72,48 @@ df_raw <- read_csv(
 df_raw
 ```
 
+## Load manual data
+
+
+```{r}
+df_manual_raw <- read_sheet(
+  url_manual,
+  col_types = str_c(c("cccc", rep("?", 22)), collapse = "")
+)
+df_manual_raw %>% 
+  glimpse()
+```
+
+Process manual data
+
+```{r}
+df_manual <- 
+  df_manual_raw %>% 
+  pivot_longer(
+    cols = -c(Authors, Title, `ISBN-13`, Assigned),
+    names_to = "term",
+    values_to = "PRESENT"
+  ) %>% 
+  filter(PRESENT == "Y") %>% 
+  mutate(
+    term = str_remove(term, "\\n.*$")
+  ) %>% 
+  select(
+    term,
+    ISBN = `ISBN-13`,
+  )
+
+df_manual
+
+df_manual %>% 
+  distinct(ISBN) %>% 
+  count()
+```
+
+
 ## Process term data
 
-Process the Index term data. "Atomize" the lines from each index into single words. This will
+Process the Index term data and join with manual data. 
 
 ```{r}
 df_data <- 
@@ -79,7 +122,8 @@ df_data <-
   # Atomize to single words
   # separate_rows(term) %>% 
   # Lowercase
-  mutate(term = str_to_lower(term))
+  mutate(term = str_to_lower(term)) %>% 
+  bind_rows(df_manual)
 
 df_data
 ```
@@ -94,6 +138,8 @@ df_meta %>%
   distinct(ISBN, .keep_all = TRUE) %>% 
   anti_join(df_data, by = "ISBN")
 ```
+
+- No unaccounted fully-digital books!
 
 I've used the chunk above to track down "missing" PDFs; most of these were due to ISBN's that did not match between the PDF filename and the metadata (Google) sheet.
 
