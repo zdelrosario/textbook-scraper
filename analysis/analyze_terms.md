@@ -63,7 +63,7 @@ df_meta_raw %>%
     ## $ Author                   <chr> "<NA>", "Anderson", "Anderson, John D.", "Ang…
     ## $ Title                    <chr> "AISC Manual of Steel Construction: Allowable…
     ## $ `ISBN 13`                <chr> NA, "9781260471441", "9780078027673", "978047…
-    ## $ Assigned                 <chr> "AJ", "KD", "ZDR", "AJ", "KD", "ZDR", "(ZDR)"…
+    ## $ Assigned                 <chr> "AJ", "KD", "ZDR", "AJ", "KD", "ZDR", "ZDR", …
     ## $ `PDF Stored`             <lgl> FALSE, TRUE, TRUE, FALSE, TRUE, TRUE, TRUE, T…
     ## $ `OCR Needed`             <lgl> FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALS…
     ## $ Courselist               <lgl> FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, T…
@@ -77,7 +77,7 @@ df_meta_raw %>%
     ## $ `Courselist Institution` <lgl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
     ## $ Year                     <dbl> NA, 2020, NA, 2006, 2011, NA, NA, NA, 2015, N…
     ## $ Type                     <chr> NA, NA, "Foundation", NA, NA, NA, NA, NA, NA,…
-    ## $ Discipline               <chr> "CEE", "Aero", "Aero", "CEE", "CEE", "ME", NA…
+    ## $ Discipline               <chr> "CEE", "Aero", "Aero", "CEE", "CEE", "ME", "M…
     ## $ `Known Courses`          <chr> "CE 426 (NCSU)", "Compressible Flows (UCLA)",…
     ## $ Link                     <chr> "XX - Interlibrary loan?", "https://icourse.c…
     ## $ Notes                    <chr> NA, "*3rd edition instead of 4th", NA, NA, NA…
@@ -132,7 +132,7 @@ df_raw <- read_csv(
 df_raw
 ```
 
-    ## # A tibble: 64,750 x 2
+    ## # A tibble: 69,836 x 2
     ##    Term                            ISBN         
     ##    <chr>                           <chr>        
     ##  1 "726 Index"                     9780521883030
@@ -145,7 +145,7 @@ df_raw
     ##  8 "principle of"                  9780521883030
     ##  9 "in con\ue01eguration space"    9780521883030
     ## 10 "in terms of quasi-coordinates" 9780521883030
-    ## # … with 64,740 more rows
+    ## # … with 69,826 more rows
 
 ## Process term data
 
@@ -164,7 +164,7 @@ df_data <-
 df_data
 ```
 
-    ## # A tibble: 64,750 x 2
+    ## # A tibble: 69,836 x 2
     ##    term                            ISBN         
     ##    <chr>                           <chr>        
     ##  1 "726 index"                     9780521883030
@@ -177,7 +177,7 @@ df_data
     ##  8 "principle of"                  9780521883030
     ##  9 "in con\ue01eguration space"    9780521883030
     ## 10 "in terms of quasi-coordinates" 9780521883030
-    ## # … with 64,740 more rows
+    ## # … with 69,826 more rows
 
 ## Sanity-check available PDFs
 
@@ -208,7 +208,7 @@ df_meta %>%
   select(authors, title)
 ```
 
-    ## # A tibble: 11 x 2
+    ## # A tibble: 12 x 2
     ##    authors                  title                                               
     ##    <chr>                    <chr>                                               
     ##  1 Anderson                 Modern compressible flow : with historical perspect…
@@ -217,11 +217,42 @@ df_meta %>%
     ##  4 Craig                    Introduction to Robotics: Mechanics and Control     
     ##  5 Gurtin, Morton E.        The mechanics and thermodynamics of continua        
     ##  6 Hill, Terrell L.         An Introduction to Statistical Thermodynamics       
-    ##  7 Kittel, Kroemer          Thermal Physics 2nd ed.                             
-    ##  8 McQuarrie, Donald A.     Statistical mechanics                               
-    ##  9 Sozen, Mete A            Understanding structures : an introduction to struc…
-    ## 10 Speyer, Chung            Stochastic Processes, Estimation, and Control       
-    ## 11 Strogatz, Steven Henry   Nonlinear dynamics and chaos: with applications to …
+    ##  7 Holtz, Kovacs, Sheahan   An introduction to geotechnical engineering 2nd ed. 
+    ##  8 Kittel, Kroemer          Thermal Physics 2nd ed.                             
+    ##  9 McQuarrie, Donald A.     Statistical mechanics                               
+    ## 10 Sozen, Mete A            Understanding structures : an introduction to struc…
+    ## 11 Speyer, Chung            Stochastic Processes, Estimation, and Control       
+    ## 12 Strogatz, Steven Henry   Nonlinear dynamics and chaos: with applications to …
+
+## Special cases
+
+``` r
+df_data %>% 
+  semi_join(
+    ., 
+    df_meta %>% 
+      filter(
+        # str_detect(authors, "Kerrebrock"), # Scraper throws weird msg 
+        ISBN == "9780471947219" # Sheppard & Tongue; OCR'd at library
+      ),
+    by = "ISBN"
+  )
+```
+
+    ## # A tibble: 1,145 x 2
+    ##    term                     ISBN         
+    ##    <chr>                    <chr>        
+    ##  1 index 635                9780471947219
+    ##  2 foot as unit of length   9780471947219
+    ##  3 overview                 9780471947219
+    ##  4 pound as unit of force 7 9780471947219
+    ##  5 second as unit of time   9780471947219
+    ##  6 slug as unit of mass     9780471947219
+    ##  7 table of standard units  9780471947219
+    ##  8 v                        9780471947219
+    ##  9 varignon's theorem       9780471947219
+    ## 10 vector addition:         9780471947219
+    ## # … with 1,135 more rows
 
 # Analyze
 
@@ -244,7 +275,7 @@ df_data %>%
     ## # A tibble: 1 x 1
     ##       n
     ##   <int>
-    ## 1    45
+    ## 1    50
 
 ## Count terms
 
@@ -315,39 +346,39 @@ df_counts %>%
 
 | term          | count | frac |
 |:--------------|------:|-----:|
-| force         |    38 | 0.84 |
-| pressure      |    34 | 0.76 |
-| design        |    31 | 0.69 |
-| limit         |    30 | 0.67 |
-| stress        |    29 | 0.64 |
-| load          |    24 | 0.53 |
-| error         |    22 | 0.49 |
-| strength      |    17 | 0.38 |
-| variation     |    17 | 0.38 |
-| probability   |    16 | 0.36 |
-| safety        |    13 | 0.29 |
-| cost          |    11 | 0.24 |
-| optimize      |     9 | 0.20 |
-| uncertainty   |     9 | 0.20 |
-| safety factor |     6 | 0.13 |
-| tradeoff      |     6 | 0.13 |
-| variability   |     6 | 0.13 |
-| tolerance     |     5 | 0.11 |
+| force         |    41 | 0.82 |
+| pressure      |    37 | 0.74 |
+| limit         |    35 | 0.70 |
+| design        |    34 | 0.68 |
+| stress        |    33 | 0.66 |
+| load          |    26 | 0.52 |
+| error         |    25 | 0.50 |
+| probability   |    19 | 0.38 |
+| variation     |    19 | 0.38 |
+| strength      |    18 | 0.36 |
+| safety        |    14 | 0.28 |
+| cost          |    13 | 0.26 |
+| uncertainty   |    11 | 0.22 |
+| optimize      |     9 | 0.18 |
+| tolerance     |     7 | 0.14 |
+| tradeoff      |     7 | 0.14 |
+| variability   |     7 | 0.14 |
+| safety factor |     6 | 0.12 |
 | minimize      |     2 | 0.04 |
 | maximize      |     1 | 0.02 |
 
 *Observations*
 
 - Physics-related terms dominate the list; `force` is important in the
-  vast majority of engineering textbooks.
+  vast majority of engineering textbooks (0.82).
 - Uncertainty-related terms appear less frequently:
-  - `probability` is important in 0.36 of textbooks. This is similar to
+  - `probability` is important in 0.38 of textbooks. This is similar to
     `frac` of `strength`
-  - `uncertainty` is important in 0.2 of textbooks. This is similar to
+  - `uncertainty` is important in 0.22 of textbooks. This is similar to
     `frac` of `optimize`
-  - `tolerance` is important in 0.11 of textbooks. This is a very small
+  - `tolerance` is important in 0.14 of textbooks. This is a very small
     fraction, but `tolerance` is quite a bit more specific than
     something like `uncertainty`
 - “Error” shows up an intermediate number of times, but as EF has shown,
   the term has a highly-variable meaning to practicing engineers.
-  - `error` is important in 0.49 of textbooks
+  - `error` is important in 0.5 of textbooks
