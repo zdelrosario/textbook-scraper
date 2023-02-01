@@ -360,19 +360,6 @@ fisher.test(mat_counts)
 
 The fraction of statistics-related titles among the missing books is not significantly different from fraction in the corpus.
 
-```{r}
-TeaTasting <-
-matrix(c(3, 1, 1, 3),
-       nrow = 2
-)
-TeaTasting
-       # dimnames = list(Guess = c("Milk", "Tea"),
-       #                 Truth = c("Milk", "Tea")))
-fisher.test(TeaTasting)
-```
-
-
-
 ## Count terms
 
 ### Definitions
@@ -403,7 +390,7 @@ term_summaries <- list(
   "tradeoff" = ~max(str_detect(.x, "tradeoff|trade")),
   ## Uncertainty
   "error" = ~max(str_detect(.x, "error")),
-  "probability" = ~max(str_detect(.x, "probability")),
+  "probability" = ~max(str_detect(.x, "probability|probabilities")),
   "statistics" = ~max(str_detect(.x, "statistic")),
   "tolerance" = ~max(str_detect(.x, "tolerance")),
   "uncertainty" = ~max(str_detect(.x, "uncertainty|uncertain")),
