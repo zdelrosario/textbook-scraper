@@ -153,6 +153,32 @@ df_meta %>%
   select(authors, title)
 ```
 
+Do we have all OCR books in our manual list?
+
+```{r}
+df_meta %>%
+  filter(include, need_ocr) %>%
+  anti_join(df_manual_raw, by = c("ISBN" = "ISBN-13"))
+```
+
+- We don't have Moran & Shapiro 7th ed, but we do have the 6th ed
+
+Do we have all OCR books coded?
+
+```{r}
+df_manual_raw %>%
+  filter(if_all(everything(), ~!is.na(.x))) %>% 
+  anti_join(
+    df_manual_raw,
+    .,
+    by = "ISBN-13"
+  )
+```
+
+- Carrier et al.: We have a hardcopy somewhere... working on it
+- Moran & Shapiro: Edition mismatch
+- Turns & Haworth: ILL placed, still waiting
+
 ## Special cases
 
 ```{r}
@@ -168,17 +194,32 @@ df_data %>%
   )
 ```
 
-## Missing books
+## Missing digitized indexes
 
 Are any books missing from the digitized corpus?
 
 ```{r}
 df_meta %>%
-  filter(include, courselist) %>%
+  filter(include, courselist, !need_ocr, !no_index) %>%
   anti_join(df_data, by = "ISBN") %>%
   select(title, everything())
 ```
 
+- No missing digitized indices
+
+## Missing any books
+
+```{r}
+df_meta %>% 
+  filter(include, courselist) %>%
+  anti_join(df_data, by = "ISBN")
+```
+
+- Gonzales & Ferrer: Has no Index section (DNE)
+
+- Carryer et al.: In progress...
+- Turns & Haworth: ILL placed...
+- Moran & Shapiro: We have the 6th edition
 
 # Analyze
 
@@ -209,24 +250,7 @@ df_meta %>%
 
 ## Describe corpus
 
-### Unique, obtained books
-
-Count the number of book indexes in the corpus
-
-```{r count-total-books}
-df_data %>%
-  semi_join(
-    .,
-    df_meta %>%
-      filter(include, courselist),
-    by = "ISBN"
-  ) %>%
-  distinct(ISBN) %>%
-  count()
-```
-
-
-### Courselists
+### Courselist books
 
 ```{r}
 df_courselist_counts <-
@@ -249,7 +273,9 @@ df_courselist_counts %>%
   summarize(n_total = sum(`Reserve Books`))
 ```
 
-### Unique, corselist books
+- the number of (double-counted) books listed across the 5 course reserve lists
+
+### Unique corselist books
 
 ```{r}
 df_meta %>%
@@ -258,6 +284,7 @@ df_meta %>%
   count()
 ```
 
+- the number of unique books listed across the 5 course reserve lists
 
 ### Digital Index
 
@@ -269,7 +296,9 @@ df_meta %>%
   count()
 ```
 
-### Print Index
+- the number of fully-digital Index sections
+
+### Manually-processed Indexes
 
 ```{r}
 df_meta %>%
@@ -284,8 +313,7 @@ df_meta %>%
 ```{r}
 df_meta %>%
   filter(include, courselist, no_index) %>%
-  distinct(ISBN) %>%
-  count()
+  distinct(ISBN, .keep_all = TRUE)
 ```
 
 ### Unobtained books
@@ -294,9 +322,12 @@ df_meta %>%
 df_meta %>%
   filter(include, courselist, !no_index) %>%
   anti_join(df_data, by = "ISBN") %>%
-  distinct(ISBN) %>%
-  count()
+  distinct(ISBN, .keep_all = TRUE)
 ```
+
+- Moran & Shapiro: We have a different edition
+- Turns & Haworth: ILL request placed
+- Carryer et al.: We have it somewhere....
 
 ### Most-occurring books
 
@@ -313,6 +344,7 @@ df_meta %>%
   )
 ```
 
+- at most, a particular textbook was listed 2x
 
 ## Statistics-related titles
 
@@ -401,7 +433,7 @@ mat_counts
 fisher.test(mat_counts)
 ```
 
-The fraction of statistics-related titles among the missing books is not significantly different from fraction in the corpus.
+The fraction of statistics-related titles among the missing books is not significantly different from fraction in the corpus. **NO LONGER RELEVANT** due to obtaining virtually every book....
 
 ## Count terms
 
@@ -557,6 +589,52 @@ ggsave(
 - "Error" shows up an intermediate number of times, but as EF has shown, the term has a highly-variable meaning to practicing engineers.
   - `error` is important in `r df_counts %>% filter(term == "error") %>% pull(frac)` of textbooks
 
+## Relative occurrence
+
+```{r}
+## Extract counts
+n_force <- df_counts %>% 
+  filter(term == "force") %>% 
+  pull(count)
+
+df_counts %>% 
+  mutate(r = round(n_force / count, 2)) %>% 
+  select(term, class, r) %>% 
+  
+  filter(term %in% c("uncertainty", "statistics", "tolerance", "safety factor"))
+```
+
+
 ## Count categories
 
-TODO
+How many books contain *any* keyword from one of the categories?
+
+```{r}
+# Run analysis
+df_count_classes <-
+  df_data %>%
+  semi_join(
+    .,
+    df_meta %>%
+      filter(include, courselist),
+    by = "ISBN"
+  ) %>%
+  group_by(ISBN) %>%
+  summarize(across(term, term_summaries)) %>% 
+  pivot_longer(
+    cols = -ISBN,
+    names_to = "term",
+    values_to = "present"
+  ) %>% 
+  mutate(term = str_remove(term, "term_")) %>% 
+  left_join(
+    df_classes
+  ) %>% 
+  group_by(class, ISBN) %>% 
+  summarize(present = max(present)) %>% 
+  summarize(n = sum(present)) %>% 
+  arrange(desc(n))
+
+df_count_classes
+```
+
