@@ -226,7 +226,8 @@ df_meta %>%
 ## Write full list
 
 ```{r write-full-list}
-df_meta %>%
+df_full_corpus <- 
+  df_meta %>%
   filter(include, courselist) %>%
   select(
     ISBN, courselist_institution, no_index
@@ -243,8 +244,15 @@ df_meta %>%
     `Institution` = courselist_institution,
     `No Index` = no_index,
     Recovered = recovered,
-  ) %>%
+  ) %>% 
+  mutate(Recovered = if_else(`No Index`, NA, Recovered))
+  
+df_full_corpus %>% 
   write_csv("../data_proc/list_pub.csv")
+
+df_full_corpus %>% 
+  distinct(ISBN, .keep_all = TRUE) %>% 
+  count(Recovered)
 ```
 
 
@@ -328,6 +336,28 @@ df_meta %>%
 - Moran & Shapiro: We have a different edition
 - Turns & Haworth: ILL request placed
 - Carryer et al.: We have it somewhere....
+
+### Artifact recovery rate
+
+```{r}
+n_total <- 
+  df_meta %>%
+  filter(include, courselist, !no_index) %>%
+  distinct(ISBN) %>%
+  count() %>% 
+  pull(n)
+
+n_missing <- 
+  df_meta %>%
+  filter(include, courselist, !no_index) %>%
+  anti_join(df_data, by = "ISBN") %>%
+  distinct(ISBN, .keep_all = TRUE) %>% 
+  count() %>% 
+  pull(n)
+
+(n_total - n_missing) / n_total * 100
+```
+
 
 ### Most-occurring books
 
@@ -588,6 +618,15 @@ ggsave(
   - `tolerance` is important in `r df_counts %>% filter(term == "tolerance") %>% pull(frac)` of textbooks. This is a very small fraction, but `tolerance` is quite a bit more specific than something like `uncertainty`
 - "Error" shows up an intermediate number of times, but as EF has shown, the term has a highly-variable meaning to practicing engineers.
   - `error` is important in `r df_counts %>% filter(term == "error") %>% pull(frac)` of textbooks
+  
+## Rates
+
+```{r}
+df_counts %>% 
+  select(frac, term, class, count) %>% 
+  arrange(desc(frac))
+```
+
 
 ## Relative occurrence
 
