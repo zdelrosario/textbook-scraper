@@ -218,10 +218,10 @@ df_meta %>%
 ```
 
 - Gonzales & Ferrer: Has no Index section (DNE)
-
-- Carryer et al.: In progress...
-- Turns & Haworth: ILL placed...
 - Moran & Shapiro: We have the 6th edition
+
+- Turns & Haworth: *COULD NOT OBTAIN*
+
 
 # Analyze
 
@@ -657,7 +657,7 @@ n_force <- df_counts %>%
   pull(count)
 
 df_counts %>% 
-  mutate(r = round(n_force / count, 2)) %>% 
+  mutate(r = round(n_force / count, 1)) %>% 
   select(term, class, r) %>% 
   
   filter(term %in% c("uncertainty", "statistics", "tolerance", "safety factor"))
