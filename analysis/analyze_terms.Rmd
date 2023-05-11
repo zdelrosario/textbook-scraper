@@ -660,7 +660,7 @@ df_counts %>%
   mutate(r = round(n_force / count, 1)) %>% 
   select(term, class, r) %>% 
   
-  filter(term %in% c("uncertainty", "statistics", "tolerance", "safety factor"))
+  filter(term %in% c("uncertainty", "statistics", "variability", "tolerance", "safety factor"))
 ```
 
 
@@ -749,8 +749,8 @@ df_counts_inst %>%
   ) %>%
 
   ggplot(aes(term, frac, color = inst)) +
-  geom_point(size = 1) +
-  geom_line(aes(group = inst), size = 0.2) +
+  # geom_point(size = 1) +
+  geom_line(aes(group = inst, linetype = inst), size = 0.5) +
 
   scale_y_continuous(
     limits = c(0, 1),
@@ -758,6 +758,7 @@ df_counts_inst %>%
   ) +
   # scale_fill_discrete(guide = "none") +
   scale_color_discrete(name = "Institution") +
+  scale_linetype_discrete(name = "Institution") +
   # scale_pattern_shape_discrete(name = "Term Class") +
   facet_wrap(~class, scales = "free") +
   rzdr::theme_common() +
