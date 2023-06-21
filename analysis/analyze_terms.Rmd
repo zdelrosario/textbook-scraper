@@ -660,7 +660,7 @@ df_counts %>%
   mutate(r = round(n_force / count, 1)) %>% 
   select(term, class, r) %>% 
   
-  filter(term %in% c("uncertainty", "statistics", "variability", "tolerance", "safety factor"))
+  filter(term %in% c("probability", "uncertainty", "statistics", "variability", "tolerance", "safety factor"))
 ```
 
 
@@ -783,7 +783,67 @@ ggsave(
 )
 ```
 
+## Physics and Uncertainty only
+
+```{r}
+## Visualize
+df_counts_inst %>%
+  rename(cls = class) %>% 
+  filter(cls %in% c("physics", "uncertainty")) %>% 
+  mutate(
+    term = fct_reorder(term, -frac, .fun = sd),
+    inst = str_replace(inst, "CalPoly", "CalPoly\nSLO"),
+    inst = str_replace(inst, "SUNY Poly", "SUNY\nPoly"),
+  ) %>%
+
+  ggplot(aes(term, frac, color = inst)) +
+  # geom_point(size = 1) +
+  geom_line(
+    data = . %>% 
+      group_by(term, cls) %>% 
+      summarize(frac = mean(frac)),
+    mapping = aes(group = 1),
+    color = "grey",
+    size = 2.0,
+  ) +
+  geom_line(aes(group = inst, linetype = inst), size = 0.7) +
+
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = scales::label_percent(),
+  ) +
+  # scale_fill_discrete(guide = "none") +
+  scale_color_discrete(name = "Institution") +
+  scale_linetype_discrete(name = "Institution") +
+  # scale_pattern_shape_discrete(name = "Term Class") +
+  facet_wrap(~cls, scales = "free") +
+  rzdr::theme_common() +
+  theme(
+    axis.text.x = element_text(size = 12, angle = 270, hjust = 0),
+    axis.text.y = element_text(size = 12),
+    strip.text.y = element_text(hjust = 0),
+    legend.position = "bottom",
+    # legend.direction = "vertical",
+    aspect.ratio = 1 / 3,
+  ) +
+  labs(
+    x = "Index Term",
+    y = "Books Including Term",
+  )
+
+ggsave(
+  "../images/textbooks-terms-inst-physunc.png",
+  width = 6.5,
+  # height = 5,
+  bg = "white"
+)
+
+```
+
+
 # Visualizing a collection
+
+## CalPoly SLO
 
 Pick on CalPoly SLO
 
@@ -796,6 +856,101 @@ df_data %>%
     by = "ISBN"
   ) %>%
   group_by(ISBN) %>%
-  summarize(across(term, term_summaries))
+  summarize(across(term, term_summaries)) %>% 
+  pivot_longer(
+    cols = -ISBN,
+    names_to = "term",
+    values_to = "present"
+  ) %>% 
+  mutate(
+    term = str_remove(term, "term_"),
+    present = (present == 1)
+  ) %>% 
+  left_join(df_classes) %>% 
+  
+  ggplot(aes(term, ISBN)) +
+  geom_tile(aes(fill = present), color = "black") +
+
+  scale_fill_manual(
+    name = "Present",
+    values = c(
+      `TRUE` = "grey20",
+      `FALSE` = "white"
+    )
+  ) +
+  facet_grid(~class, scales = "free_x") +
+  rzdr::theme_common() +
+  theme(
+    axis.text.x = element_text(size = 12, angle = 270, hjust = 0),
+    axis.text.y = element_text(size = 8),
+    strip.text.y = element_text(hjust = 0),
+    legend.position = "bottom",
+    # legend.direction = "vertical",
+    aspect.ratio = 1.5 / 1,
+  ) +
+  labs(
+    title = "CalPoly SLO Collection: Index Terms"
+  )
+
+ggsave(
+  "../images/textbooks-terms-CalPoly.png",
+  width = 6.5,
+  # height = 5,
+  bg = "white"
+)
 ```
 
+## MIT
+
+```{r}
+df_data %>%
+  semi_join(
+    .,
+    df_meta %>%
+      filter(include, courselist, courselist_institution == "MIT"),
+    by = "ISBN"
+  ) %>%
+  group_by(ISBN) %>%
+  summarize(across(term, term_summaries)) %>% 
+  pivot_longer(
+    cols = -ISBN,
+    names_to = "term",
+    values_to = "present"
+  ) %>% 
+  mutate(
+    term = str_remove(term, "term_"),
+    present = (present == 1)
+  ) %>% 
+  left_join(df_classes) %>% 
+  
+  ggplot(aes(term, ISBN)) +
+  geom_tile(aes(fill = present), color = "black") +
+
+  scale_fill_manual(
+    name = "Present",
+    values = c(
+      `TRUE` = "grey20",
+      `FALSE` = "white"
+    )
+  ) +
+  facet_grid(~class, scales = "free_x") +
+  rzdr::theme_common() +
+  theme(
+    axis.text.x = element_text(size = 12, angle = 270, hjust = 0),
+    axis.text.y = element_text(size = 8),
+    strip.text.y = element_text(hjust = 0),
+    legend.position = "bottom",
+    # legend.direction = "vertical",
+    aspect.ratio = 1.5 / 1,
+  ) +
+  labs(
+    title = "MIT Collection: Index Terms"
+  )
+
+ggsave(
+  "../images/textbooks-terms-MIT.png",
+  width = 6.5,
+  # height = 5,
+  bg = "white"
+)
+```
